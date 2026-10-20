@@ -3,29 +3,25 @@ package io.github.fallcodes.kanjigardenclient
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
-import android.view.Gravity
-import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.webkit.CookieManager
-import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
-import android.widget.ProgressBar
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var webView: WebView
-    private lateinit var progressBar: ProgressBar
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,17 +46,13 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun buildLayout() {
-        webView = WebView(this)
-
-        progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-            max = 100
-            visibility = View.GONE
-            progressTintList = android.content.res.ColorStateList.valueOf(getColor(R.color.garden_green))
+        webView = WebView(this).apply {
+            // Match the site's background so startup goes straight from blank to the page.
+            setBackgroundColor(getColor(R.color.background))
         }
 
         val root = FrameLayout(this).apply {
             addView(webView, MATCH_PARENT, MATCH_PARENT)
-            addView(progressBar, FrameLayout.LayoutParams(MATCH_PARENT, dp(4), Gravity.TOP))
         }
 
         ViewCompat.setOnApplyWindowInsetsListener(root) { view, insets ->
@@ -90,6 +82,12 @@ class MainActivity : ComponentActivity() {
             mediaPlaybackRequiresUserGesture = false
         }
 
+        // Mark the site's "download the app" prompt (the phone icon) as already dismissed
+        // before its scripts run; the app it links to is no longer available.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            WebViewCompat.addDocumentStartJavaScript(webView, HIDE_APP_PROMPT_JS, setOf("https://$SITE_HOST"))
+        }
+
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val uri = request.url
@@ -102,20 +100,8 @@ class MainActivity : ComponentActivity() {
                 return true
             }
 
-            override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
-                progressBar.visibility = View.VISIBLE
-            }
-
             override fun onPageFinished(view: WebView, url: String?) {
-                progressBar.visibility = View.GONE
                 CookieManager.getInstance().flush()
-            }
-        }
-
-        webView.webChromeClient = object : WebChromeClient() {
-            override fun onProgressChanged(view: WebView, newProgress: Int) {
-                progressBar.progress = newProgress
-                progressBar.visibility = if (newProgress < 100) View.VISIBLE else View.GONE
             }
         }
     }
@@ -132,8 +118,6 @@ class MainActivity : ComponentActivity() {
             // Nothing can handle it; ignore.
         }
     }
-
-    private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
@@ -161,5 +145,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val SITE_HOST = "kanji.garden"
         private const val HOME_URL = "https://$SITE_HOST/"
+        private const val HIDE_APP_PROMPT_JS =
+            "try { localStorage.setItem('notifyNative', 'true'); } catch (e) {}"
     }
 }
