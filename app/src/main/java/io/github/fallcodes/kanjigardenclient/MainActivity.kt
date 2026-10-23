@@ -1,12 +1,15 @@
 package io.github.fallcodes.kanjigardenclient
 
 import android.annotation.SuppressLint
+import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.webkit.CookieManager
+import android.webkit.JsResult
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -104,6 +107,31 @@ class MainActivity : ComponentActivity() {
                 CookieManager.getInstance().flush()
             }
         }
+
+        // Without a WebChromeClient, WebView silently cancels alert()/confirm(), which breaks
+        // the site's prompts (e.g. "Learn ahead?"). Show them as native dialogs instead.
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onJsAlert(view: WebView, url: String?, message: String?, result: JsResult): Boolean {
+                showJsDialog(message, result, withCancel = false)
+                return true
+            }
+
+            override fun onJsConfirm(view: WebView, url: String?, message: String?, result: JsResult): Boolean {
+                showJsDialog(message, result, withCancel = true)
+                return true
+            }
+        }
+    }
+
+    private fun showJsDialog(message: String?, result: JsResult, withCancel: Boolean) {
+        val builder = AlertDialog.Builder(this)
+            .setMessage(message)
+            .setPositiveButton(android.R.string.ok) { _, _ -> result.confirm() }
+            .setOnCancelListener { result.cancel() }
+        if (withCancel) {
+            builder.setNegativeButton(android.R.string.cancel) { _, _ -> result.cancel() }
+        }
+        builder.show()
     }
 
     private fun isOwnHost(uri: Uri): Boolean {
